@@ -1,108 +1,124 @@
 package org.injecto.findflight.data;
 
+import com.opencsv.CSVReader;
 import org.injecto.findflight.model.Flight;
 import org.injecto.findflight.model.Location;
 import org.injecto.findflight.model.Transfer;
-import org.jooq.DSLContext;
-import org.jooq.Record;
-import org.jooq.Result;
-import org.jooq.impl.DSL;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.inject.Inject;
-import javax.inject.Named;
 import javax.inject.Singleton;
+import java.io.InputStreamReader;
 import java.math.BigDecimal;
-import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.time.Month;
+import java.util.*;
+
+import static java.lang.Math.round;
+import static java.lang.Math.toIntExact;
 
 @Singleton
 public class ModelLoader {
     private static final Logger log = LoggerFactory.getLogger(ModelLoader.class);
-    private static final String SAMPLE_DB = "/sample_db.sql";
 
-    private final String dbUrl;
+    private static final Random RAND_GEN = new Random();
+    private static final double PLANE_VELOCITY = 500.0; // km/h
 
-    @Inject
-    public ModelLoader(@Named("db.url") String dbUrl) {
-        this.dbUrl = dbUrl;
-        createSampleDb();
-    }
+    private static final String AIRLINES_FILE = "/airlines.dat";
+    private static final String AIRPORTS_FILE = "/airports.dat";
+    private static final String ROUTES_FILE = "/routes.dat";
 
     public List<Transfer> loadModel() {
-        try (Connection connection = DriverManager.getConnection(dbUrl)) {
-            DSLContext ctx = DSL.using(connection);
+        Map<Integer, Flight> flights = loadFlights();
+        Map<Integer, Location> locations = loadLocations();
 
-            Result<Record> res = ctx.select().from("flight").fetch();
-            Map<Integer, Flight> flights = new HashMap<>(res.size());
-            for (Record r : res) {
-                Integer id = r.getValue("ID", Integer.class);
-                String name = r.getValue("NAME", String.class);
-                BigDecimal cost = r.getValue("COST", BigDecimal.class);
-                flights.put(id, new Flight(id, name, cost));
+        List<Transfer> transfers = new ArrayList<>();
+        CSVReader reader = new CSVReader(new InputStreamReader(getClass().getResourceAsStream(ROUTES_FILE)));
+        for (String[] line : reader) {
+            if (!"0".equals(line[7]))   // ignore multi-hop route
+                continue;
+
+            Integer flightId, src, dst;
+            try {
+                flightId = Integer.valueOf(line[1]);
+                if (!flights.containsKey(flightId))
+                    throw inconsistentData(line);
+
+                src = Integer.valueOf(line[3]);
+                if (!locations.containsKey(src))
+                    throw inconsistentData(line);
+
+                dst = Integer.valueOf(line[5]);
+                if (!locations.containsKey(dst))
+                    throw inconsistentData(line);
+            } catch (NumberFormatException e) {
+                continue;
             }
 
-            res = ctx.select().from("location").fetch();
-            Map<Integer, Location> locations = new HashMap<>(res.size());
-            for (Record r : res) {
-                Integer id = r.getValue("ID", Integer.class);
-                String name = r.getValue("NAME", String.class);
-                locations.put(id, new Location(id, name));
-            }
-
-            res = ctx.select().from("transfer").fetch();
-            List<Transfer> transfers = new ArrayList<>(res.size());
-            for (Record r : res) {
-                Integer flightId = r.getValue("FLIGHT_ID", Integer.class);
-                Integer waitingTime = r.getValue("WAITING_TIME", Integer.class);
-                LocalDateTime departureTime = r.getValue("DEPARTURE_TIME", LocalDateTime.class);
-                Integer duration = r.getValue("DURATION", Integer.class);
-                Integer from = r.getValue("FROM_LOCATION", Integer.class);
-                Integer to = r.getValue("TO_LOCATION", Integer.class);
-
-                if (!(flights.containsKey(flightId) && locations.containsKey(from) && locations.containsKey(to))) {
-                    String msg = String.format("Inconsistent transfer data: flight %d, from %d, to %d", flightId, from, to);
-                    throw new RuntimeException(msg);
-                }
-
-                transfers.add(new Transfer(flights.get(flightId), waitingTime, departureTime, duration,
-                        locations.get(from), locations.get(to)));
-            }
-
-            log.info("Model was loaded ({} transfers total)", transfers.size());
-            return transfers;
-        } catch (SQLException e) {
-            log.error("Can't load model", e);
-            throw new RuntimeException(e);
+            int waitingTime = RAND_GEN.nextInt(181);
+            LocalDateTime departureTime = LocalDateTime.of(2016, Month.MAY, 12, RAND_GEN.nextInt(24), RAND_GEN.nextInt(60));
+            Location from = locations.get(src);
+            Location to = locations.get(dst);
+            int duration = calculateDuration(from, to);
+            Transfer t = new Transfer(flights.get(flightId), waitingTime, departureTime, duration, from, to);
+            transfers.add(t);
         }
+        return transfers;
     }
 
-    private void createSampleDb() {
-        String sql;
-        try {
-            URL sampleDbUrl = getClass().getResource(SAMPLE_DB);
-            byte[] bs = Files.readAllBytes(Paths.get(sampleDbUrl.toURI()));
-            sql = new String(bs);
-        } catch (Throwable e) {
-            throw new RuntimeException("Can't load sample DB script");
-        }
+    private static IllegalStateException inconsistentData(String[] line) {
+        return new IllegalStateException("Inconsistent route data: " + Arrays.toString(line));
+    }
 
-        try (Connection connection = DriverManager.getConnection(dbUrl)) {
-            DSLContext ctx = DSL.using(connection);
-            ctx.batch(sql).execute();
-        } catch (Throwable e) {
-            log.error("Can't create sample DB", e);
-            throw new RuntimeException(e);
+    /**
+     * See <a href="https://www.geodatasource.com/developers/java">algorithm source</a>
+     */
+    private static int calculateDuration(Location from, Location to) {
+        double lon1 = from.getLon();
+        double lon2 = to.getLon();
+        double lat1 = from.getLat();
+        double lat2 = to.getLat();
+
+        double theta = lon1 - lon2;
+        double dist = Math.sin(deg2rad(lat1)) * Math.sin(deg2rad(lat2)) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.cos(deg2rad(theta));
+        dist = Math.acos(dist);
+        dist = rad2deg(dist);
+        dist = dist * 60 * 1.1515;
+        dist = dist * 1.609344; // kilometers
+
+        return toIntExact(round(dist / PLANE_VELOCITY * 60.0));
+    }
+
+    private static double deg2rad(double deg) {
+        return (deg * Math.PI / 180.0);
+    }
+
+    private static double rad2deg(double rad) {
+        return (rad * 180 / Math.PI);
+    }
+
+    private Map<Integer, Flight> loadFlights() {
+        Map<Integer, Flight> flights = new HashMap<>();
+        CSVReader reader = new CSVReader(new InputStreamReader(getClass().getResourceAsStream(AIRLINES_FILE)));
+        for (String[] line : reader) {
+            int id = Integer.valueOf(line[0]);
+            Flight f = new Flight(id, line[1], BigDecimal.valueOf(RAND_GEN.nextInt(291) + 10));
+            flights.put(id, f);
         }
+        log.info("{} airlines was loaded", flights.size());
+        return flights;
+    }
+
+    private Map<Integer, Location> loadLocations() {
+        Map<Integer, Location> locations = new HashMap<>();
+        CSVReader reader = new CSVReader(new InputStreamReader(getClass().getResourceAsStream(AIRPORTS_FILE)));
+        for (String[] line : reader) {
+            int id = Integer.valueOf(line[0]);
+            String name = line[2] + '-' + line[3];
+            Location l = new Location(id, name, Double.valueOf(line[6]), Double.valueOf(line[7]));
+            locations.put(id, l);
+        }
+        log.info("{} airports was loaded", locations.size());
+        return locations;
     }
 }

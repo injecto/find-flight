@@ -5,10 +5,14 @@ import java.util.Objects;
 public class Location {
     private final int id;
     private final String name;
+    private final double lat;
+    private final double lon;
 
-    public Location(int id, String name) {
+    public Location(int id, String name, double lat, double lon) {
         this.id = id;
         this.name = name;
+        this.lat = lat;
+        this.lon = lon;
     }
 
     public int getId() {
@@ -25,6 +29,14 @@ public class Location {
         if (o == null || getClass() != o.getClass()) return false;
         Location location = (Location) o;
         return id == location.id;
+    }
+
+    public double getLat() {
+        return lat;
+    }
+
+    public double getLon() {
+        return lon;
     }
 
     @Override

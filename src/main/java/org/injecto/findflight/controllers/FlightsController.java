@@ -8,6 +8,8 @@ import org.jgrapht.DirectedGraph;
 import org.jgrapht.GraphPath;
 import org.jgrapht.alg.KShortestPaths;
 import org.jgrapht.graph.DirectedMultigraph;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.inject.Inject;
 import javax.inject.Named;
@@ -21,6 +23,8 @@ import static java.time.temporal.ChronoUnit.MINUTES;
 
 @Singleton
 public class FlightsController {
+    private static final Logger log = LoggerFactory.getLogger(FlightsController.class);
+
     private final int minChangeTime;
     private final int maxRoutes;
     private final DirectedGraph<Location, Transfer> graph;
@@ -44,7 +48,12 @@ public class FlightsController {
 
             graph.addVertex(from);
             graph.addVertex(to);
-            graph.addEdge(from, to, t);
+
+            try {
+                graph.addEdge(from, to, t);
+            } catch (IllegalArgumentException e) {
+                log.error("Transfer {} was skipped", t, e);
+            }
         }
     }
 
