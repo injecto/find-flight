@@ -3,6 +3,7 @@ package org.injecto.findflight.model;
 import java.math.BigDecimal;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Objects;
 
 import static java.time.temporal.ChronoUnit.MINUTES;
 
@@ -61,5 +62,18 @@ public class Route {
                     .append(' ').append(t.getTo());
         }
         return sb.toString();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Route route = (Route) o;
+        return Objects.equals(transfers, route.transfers);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(transfers);
     }
 }

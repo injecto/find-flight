@@ -19,7 +19,7 @@ or `gradlew.bat` on Windows.
 Make HTTP query to `localhost:8080/routes/<from>/<to>/[?order=changes|duration|cost[&desc]]`. E.g.:
 
 ```bash
-http "localhost:8080/routes/moscow/paris/?order=cost&desc"
+$ http "localhost:8080/routes/moscow/paris/?order=cost&desc"
 HTTP/1.1 200 OK
 Content-Encoding: gzip
 Content-Type: application/json

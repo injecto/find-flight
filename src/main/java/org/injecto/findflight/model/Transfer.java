@@ -66,6 +66,6 @@ public class Transfer {
 
     @Override
     public String toString() {
-        return from + " " + waitingTime + " -" + duration + "->" + to + " (" + flight + ")";
+        return from + " " + waitingTime + " -" + duration + "-> " + to + " (" + flight + ")";
     }
 }

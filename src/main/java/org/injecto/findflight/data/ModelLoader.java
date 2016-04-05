@@ -63,6 +63,7 @@ public class ModelLoader {
             Transfer t = new Transfer(flights.get(flightId), waitingTime, departureTime, duration, from, to);
             transfers.add(t);
         }
+        log.info("{} routes was loaded", transfers.size());
         return transfers;
     }
 

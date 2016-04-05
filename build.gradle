@@ -11,18 +11,17 @@ repositories {
 }
 
 mainClassName = "org.injecto.findflight.App"
-applicationDefaultJvmArgs = ["-Dorg.jooq.no-logo=true"] // disable annoying jooq's splash message in logs
+applicationDefaultJvmArgs = ["-Dlogback.configurationFile=/home/injecto/dev/find-flight/logback.xml"]
 
 dependencies {
     compile     'com.google.code.findbugs:jsr305:3.0.0'
     compile     'com.google.inject:guice:4.0'
     compile     'org.jgrapht:jgrapht-core:0.9.1'
-    compile     'com.sparkjava:spark-core:2.3'
+    compile    ('com.sparkjava:spark-core:2.3') { exclude group: 'org.slf4j' }
     compile     'com.google.code.gson:gson:2.6.2'
     compile     'com.opencsv:opencsv:3.7'
 
-    compile     'org.slf4j:slf4j-api:1.7.20'
-    compile     'ch.qos.logback:logback-core:1.1.7'
+    compile     'ch.qos.logback:logback-classic:1.1.7'
 
     testCompile 'junit:junit:4.11'
 }

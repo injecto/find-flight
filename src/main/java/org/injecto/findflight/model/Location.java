@@ -23,6 +23,10 @@ public class Location {
         return name;
     }
 
+    public String getCanonicalName() {
+        return name.replaceAll("\\s|\\W", "-").toLowerCase();
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
