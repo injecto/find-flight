@@ -17,11 +17,16 @@ import javax.inject.Inject;
 import javax.inject.Named;
 import javax.inject.Singleton;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
+import static java.lang.System.currentTimeMillis;
 import static java.time.temporal.ChronoUnit.MINUTES;
 import static java.util.Collections.emptySet;
+import static java.util.Collections.unmodifiableMap;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 @Singleton
@@ -44,7 +49,7 @@ public class FlightsController {
         this.executor = executor;
 
         DirectedGraph<Location, Transfer> graph = new DirectedMultigraph<>(Transfer.class);
-        locations = new HashMap<>();
+        Map<String, Location> locations = new HashMap<>();
         List<Transfer> transfers = modelLoader.loadModel();
         for (Transfer t : transfers) {
             Location from = t.getFrom();
@@ -62,6 +67,7 @@ public class FlightsController {
                 log.error("Transfer {} was skipped: {}", t, e.getMessage());
             }
         }
+        this.locations = unmodifiableMap(locations);
         this.graph = new UnmodifiableDirectedGraph<>(graph);
     }
 
@@ -73,12 +79,13 @@ public class FlightsController {
 
         Location from = locations.get(startLocation.toLowerCase());
         Location to = locations.get(endLocation.toLowerCase());
-        Future<Set<Route>> routesFuture = executor.submit(() -> getRoutes(from, to));
+
+        Future<Set<Route>> routesFuture = executor.submit(() -> findRoutes(from, to));
         try {
-            return routesFuture.get(maxSearchTime, SECONDS);
+            return routesFuture.get(maxSearchTime + 1, SECONDS);
         } catch (TimeoutException | InterruptedException e) {
-            boolean cancelled = routesFuture.cancel(true);
-            log.warn("Slow routes search, operation was cancelled{}", cancelled ? "" : ", but unsuccessfully");
+            routesFuture.cancel(true);
+            log.warn("Slow routes search, operation was cancelled");
             return emptySet();
         } catch (ExecutionException e) {
             log.warn("Can't find routes", e);
@@ -86,41 +93,44 @@ public class FlightsController {
         }
     }
 
-    private Set<Route> getRoutes(Location from, Location to) {
+    public Set<String> locationsStartedWith(String prefix) {
+        return locations.keySet().stream()
+                .filter(canonicalName -> canonicalName.startsWith(prefix))
+                .collect(Collectors.toSet());
+    }
+
+    private Set<Route> findRoutes(Location from, Location to) {
         log.debug("Start routes search for {} -> {}", from, to);
 
         Set<Route> routes = new HashSet<>();
         Queue<Transfer> canMask = new ArrayDeque<>();
-        DirectedGraph<Location, Transfer> original = this.graph;
-        DirectedGraph<Location, Transfer> graphView = original;
-        while (routes.size() <= maxRoutes && !Thread.currentThread().isInterrupted()) {
-            log.debug("Route search attempt");
-            List<Transfer> path = DijkstraShortestPath.findPathBetween(graphView, from, to);
+        DirectedGraph<Location, Transfer> model = this.graph;
+        DirectedGraph<Location, Transfer> attemptView = model;
+        long threshold = currentTimeMillis() + maxSearchTime * 1000;
+
+        while (routes.size() < maxRoutes && !Thread.currentThread().isInterrupted() && currentTimeMillis() < threshold) {
+            log.trace("Route search attempt");
+            List<Transfer> path = DijkstraShortestPath.findPathBetween(attemptView, from, to);
             canMask.addAll(path);
             Transfer toMask = canMask.poll();
             if (toMask == null)
                 break;
 
-            graphView = new DirectedMaskSubgraph<>(original, new MaskedEdges(toMask));
+            attemptView = new DirectedMaskSubgraph<>(model, new MaskedEdges(toMask));
 
             if (isRouteValid(path)) {
                 Route r = new Route(path);
                 boolean isNew = routes.add(r);
-                if (isNew)
+                if (isNew) {
                     log.debug("Route was found: {}", r);
-                else
-                    original = new DirectedMaskSubgraph<>(original, new MaskedEdges(path));
+                } else {
+                    model = new DirectedMaskSubgraph<>(model, new MaskedEdges(path));
+                }
             }
         }
 
         log.debug("Routes search for {} -> {} done ({} routes found)", from, to, routes.size());
         return routes;
-    }
-
-    public Set<String> locationsStartedWith(String prefix) {
-        return locations.keySet().stream()
-                .filter(canonicalName -> canonicalName.startsWith(prefix))
-                .collect(Collectors.toSet());
     }
 
     private boolean isRouteValid(List<Transfer> transfers) {
@@ -136,5 +146,4 @@ public class FlightsController {
         }
         return true;
     }
-
 }
