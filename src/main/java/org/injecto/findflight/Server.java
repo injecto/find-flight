@@ -35,7 +35,7 @@ public class Server {
                 .create();
     }
 
-    public void start() {
+    void start() {
         log.info("Start server");
         port(port);
         get("/routes/:from/:to/", routesHandler, gson::toJson);
@@ -45,7 +45,7 @@ public class Server {
         });
     }
 
-    public void stop() {
+    void stop() {
         log.info("Stop server");
         Spark.stop();
     }

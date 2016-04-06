@@ -1,9 +1,6 @@
-package org.injecto.findflight.controllers;
+package org.injecto.findflight.model;
 
 import org.injecto.findflight.data.ModelLoader;
-import org.injecto.findflight.model.Location;
-import org.injecto.findflight.model.Route;
-import org.injecto.findflight.model.Transfer;
 import org.injecto.findflight.util.MaskedEdges;
 import org.jgrapht.DirectedGraph;
 import org.jgrapht.alg.DijkstraShortestPath;
@@ -13,44 +10,38 @@ import org.jgrapht.graph.UnmodifiableDirectedGraph;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
 import javax.inject.Inject;
 import javax.inject.Named;
 import javax.inject.Singleton;
 import java.util.*;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 import static java.lang.System.currentTimeMillis;
 import static java.time.temporal.ChronoUnit.MINUTES;
-import static java.util.Collections.emptySet;
 import static java.util.Collections.unmodifiableMap;
-import static java.util.concurrent.TimeUnit.SECONDS;
 
 @Singleton
-public class FlightsController {
-    private static final Logger log = LoggerFactory.getLogger(FlightsController.class);
+public class Graph {
+    private static final Logger log = LoggerFactory.getLogger(Graph.class);
 
-    private final ExecutorService executor;
+    private final Map<String, Location> locations;
+    private final DirectedGraph<Location, Transfer> graph;
     private final int minChangeTime;
     private final int maxRoutes;
     private final int maxSearchTime;
-    private final DirectedGraph<Location, Transfer> graph;
-    private final Map<String, Location> locations;
 
     @Inject
-    public FlightsController(@Named("routes.minChangeTime") int minChangeTime, @Named("routes.maxRoutes") int maxRoutes,
-                             @Named("routes.maxSearchTime") int maxSearchTime, ModelLoader modelLoader, ExecutorService executor) {
+    public Graph(ModelLoader modelLoader, @Named("routes.minChangeTime") int minChangeTime,
+                 @Named("routes.maxRoutes") int maxRoutes, @Named("routes.maxSearchTime") int maxSearchTime) {
         this.minChangeTime = minChangeTime;
         this.maxRoutes = maxRoutes;
         this.maxSearchTime = maxSearchTime;
-        this.executor = executor;
 
         DirectedGraph<Location, Transfer> graph = new DirectedMultigraph<>(Transfer.class);
         Map<String, Location> locations = new HashMap<>();
         List<Transfer> transfers = modelLoader.loadModel();
+
         for (Transfer t : transfers) {
             Location from = t.getFrom();
             Location to = t.getTo();
@@ -71,35 +62,25 @@ public class FlightsController {
         this.graph = new UnmodifiableDirectedGraph<>(graph);
     }
 
-    public Set<Route> getRoutes(String startLocation, String endLocation) {
-        if (!locations.containsKey(startLocation.toLowerCase()))
-            throw new IllegalArgumentException("Unknown location `" + startLocation + "`");
-        if (!locations.containsKey(endLocation.toLowerCase()))
-            throw new IllegalArgumentException("Unknown location `" + endLocation + "`");
-
-        Location from = locations.get(startLocation.toLowerCase());
-        Location to = locations.get(endLocation.toLowerCase());
-
-        Future<Set<Route>> routesFuture = executor.submit(() -> findRoutes(from, to));
-        try {
-            return routesFuture.get(maxSearchTime + 1, SECONDS);
-        } catch (TimeoutException | InterruptedException e) {
-            routesFuture.cancel(true);
-            log.warn("Slow routes search, operation was cancelled");
-            return emptySet();
-        } catch (ExecutionException e) {
-            log.warn("Can't find routes", e);
-            return emptySet();
-        }
+    public boolean locationExist(String canonicalName) {
+        return locations.containsKey(canonicalName);
     }
 
-    public Set<String> locationsStartedWith(String prefix) {
+    @Nullable
+    public Location getLocation(String canonicalName) {
+        return locations.get(canonicalName);
+    }
+
+    /**
+     * Note: linear complexity
+     */
+    public Set<String> getLocationCanonicalNamesByPrefix(String prefix) {
         return locations.keySet().stream()
                 .filter(canonicalName -> canonicalName.startsWith(prefix))
                 .collect(Collectors.toSet());
     }
 
-    private Set<Route> findRoutes(Location from, Location to) {
+    public Set<Route> findRoutes(Location from, Location to) {
         log.debug("Start routes search for {} -> {}", from, to);
 
         Set<Route> routes = new HashSet<>();

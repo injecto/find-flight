@@ -11,7 +11,6 @@ repositories {
 }
 
 mainClassName = "org.injecto.findflight.App"
-applicationDefaultJvmArgs = ["-Dlogback.configurationFile=/home/injecto/dev/find-flight/logback.xml"]
 
 dependencies {
     compile     'com.google.code.findbugs:jsr305:3.0.0'

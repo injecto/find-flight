@@ -25,11 +25,12 @@ public class App {
         Runtime.getRuntime().addShutdownHook(new Thread(app::stop));
     }
 
-    public void start() {
+    private void start() {
         server.start();
     }
 
-    public void stop() {
+    private void stop() {
+        server.stop();
         executorService.shutdown();
         try {
             if (!executorService.awaitTermination(5, SECONDS)) {
@@ -39,6 +40,5 @@ public class App {
             executorService.shutdownNow();
             Thread.currentThread().interrupt();
         }
-        server.stop();
     }
 }

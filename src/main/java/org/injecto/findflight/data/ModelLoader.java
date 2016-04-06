@@ -31,7 +31,10 @@ public class ModelLoader {
     public List<Transfer> loadModel() {
         Map<Integer, Flight> flights = loadFlights();
         Map<Integer, Location> locations = loadLocations();
+        return loadTransfers(flights, locations);
+    }
 
+    private List<Transfer> loadTransfers(Map<Integer, Flight> flights, Map<Integer, Location> locations) {
         List<Transfer> transfers = new ArrayList<>();
         CSVReader reader = new CSVReader(new InputStreamReader(getClass().getResourceAsStream(ROUTES_FILE)));
         for (String[] line : reader) {

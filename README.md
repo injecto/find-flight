@@ -17,13 +17,13 @@ or `gradlew.bat` on Windows.
 
 ### Usage
 
-Make HTTP query to `/routes/<from>/<to>/[?order=changes|duration|cost[&desc]]`. E.g.:
+Make HTTP query to `/routes/<from>/<to>/[?order=changes|duration|cost[&desc]]` for routes search. E.g.:
 
-http://localhost:8080/routes/moscow-russia/hong-kong-hong-kong/?order=cost&desc
+[http://localhost:8080/routes/moscow-russia/hong-kong-hong-kong/?order=cost&desc](http://localhost:8080/routes/moscow-russia/hong-kong-hong-kong/?order=cost&desc)
 
 If you need to find available locations, use `/locations/<prefix>/` like
 
-http://localhost:8080/locations/mos/
+[http://localhost:8080/locations/mos/](http://localhost:8080/locations/mos/)
 
 ### Data source
 

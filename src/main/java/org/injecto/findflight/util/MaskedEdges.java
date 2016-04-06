@@ -13,6 +13,7 @@ import java.util.Set;
 
 public class MaskedEdges implements MaskFunctor<Location, Transfer> {
     private static final Logger log = LoggerFactory.getLogger(MaskedEdges.class);
+
     private final Set<Transfer> maskedEdges;
 
     public MaskedEdges(List<Transfer> maskedEdges) {
